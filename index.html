@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>手机信息识别工作台 · 浏览器 OCR 测试版</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob:; img-src 'self' blob: data:; style-src 'self'; object-src 'none'; base-uri 'self'">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./tesseract.min.js" defer></script>
+<script src="./fields.js" defer></script>
+<script src="./engine.js" defer></script>
+<script src="./storage.js" defer></script>
+<script src="./export.js" defer></script>
+<script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="手机信息识别工作台"><span class="brand-mark" data-icon="scan"></span><div><h1>手机信息识别工作台</h1><span class="brand-sub">BROWSER OCR · 测试版</span></div></a>
+    <div class="top-actions"><span id="connection" class="local-badge"><i></i> 浏览器运行 · 图片不上传</span><button id="import-top" class="button"><span data-icon="plus"></span>导入图片</button><button id="export" class="button primary"><span data-icon="download"></span>导出 Excel</button></div>
+  </header>
+  <main>
+    <section class="intro"><div><h2>批量识别与核对</h2><p>提取型号、内存与两组 IMEI，保留原图供人工对照。</p></div><span class="engine"><span data-icon="cpu"></span> Tesseract.js · 使用本设备 CPU / 内存</span></section>
+    <input id="file-input" type="file" multiple accept=".jpg,.jpeg,.png,.heic,.heif,.webp,.tif,.tiff" hidden>
+    <button id="dropzone" class="dropzone"><span class="upload-symbol" data-icon="upload"></span><span class="drop-copy"><strong>拖拽多张图片到这里，或<span class="blue">点击批量导入</span></strong><small>JPG、PNG、WebP（其他格式依浏览器支持） · 每张最大 30 MB · 自动跳过相同图片</small></span><span class="drop-tail">选择图片 <span data-icon="arrow"></span></span></button>
+    <div class="browser-status"><span id="engine-status">浏览器 OCR 测试版 · 首次识别需加载模型</span><button id="pause-queue" class="button">暂停队列</button></div>
+    <div id="startup-error" class="notice" role="alert" hidden></div>
+    <div id="upload-feedback" class="notice" hidden></div>
+    <section class="overview" aria-label="识别统计">
+      <div class="stat"><span class="stat-icon blue-bg" data-icon="images"></span><div><span>图片总数</span><strong id="count-all">0</strong></div></div>
+      <div class="stat"><span class="stat-icon green-bg" data-icon="check"></span><div><span>识别成功 / 已核对</span><strong id="count-success">0</strong></div></div>
+      <div class="stat"><span class="stat-icon amber-bg" data-icon="clock"></span><div><span>待核对</span><strong id="count-review">0</strong></div></div>
+      <div class="stat"><span class="stat-icon red-bg" data-icon="alert"></span><div><span>识别错误</span><strong id="count-error">0</strong></div></div>
+      <div class="progress-card"><div><strong id="progress-title">等待导入图片</strong><span id="progress-count">0 / 0</span></div><div class="progress-track"><div id="progress-bar"></div></div><small id="progress-caption">导入后自动开始识别</small></div>
+    </section>
+    <section class="workspace">
+      <div class="panel results-panel">
+        <div class="panel-heading"><div><h3>识别结果 <span id="result-count" class="count-pill">0</span></h3><p>选择一条记录，在右侧对照原图修改</p></div><span class="autosave"><i></i> 已保存到此浏览器</span></div>
+        <div class="table-toolbar"><div class="tabs" role="tablist" aria-label="结果筛选"><button class="tab active" data-filter="all" role="tab" aria-selected="true">全部</button><button class="tab" data-filter="review" role="tab" aria-selected="false">待核对</button><button class="tab" data-filter="error" role="tab" aria-selected="false">识别错误</button><button class="tab" data-filter="verified" role="tab" aria-selected="false">已核对</button></div><label class="search"><span data-icon="search"></span><input id="search" placeholder="搜索型号 / IMEI / 文件名" aria-label="搜索记录"></label></div>
+        <div class="table-scroll"><table><thead><tr><th class="row-number">#</th><th>参考图</th><th>型号 / 文件</th><th>内存 / 存储</th><th>IMEI 1</th><th>IMEI 2</th><th>状态</th></tr></thead><tbody id="rows"></tbody></table><div id="table-empty" class="empty-state"><span data-icon="images"></span><h4>从第一张照片开始</h4><p>批量导入手机盒标签照片，识别结果会显示在这里。</p><button class="button primary" id="import-empty">导入图片</button></div></div>
+        <div class="table-footer"><span id="table-summary">共 0 条记录</span><span>识别成功仍建议对照原图核对</span></div>
+      </div>
+      <aside class="panel editor-panel">
+        <div class="panel-heading"><div><h3>原图对照与修改</h3><p id="editor-caption">选中记录后即可开始核对</p></div><span class="small-icon" data-icon="sliders"></span></div>
+        <div id="editor-empty" class="editor-empty"><span data-icon="scan"></span><h4>原图与结果，一眼对照</h4><p>选择左侧记录查看参考图片，<br>可放大细节、手动修改并保存。</p></div>
+        <div id="editor" hidden>
+          <div class="image-heading"><span id="filename"></span><div><button id="prev" class="icon-button" aria-label="上一张" title="上一张"><span data-icon="left"></span></button><span id="image-index"></span><button id="next" class="icon-button" aria-label="下一张" title="下一张"><span data-icon="right"></span></button></div></div>
+          <div id="image-stage" class="image-stage"><div id="image-canvas"><img id="preview" alt="当前记录的参考原图" draggable="false"></div><span id="image-placeholder">正在生成图片预览…</span></div>
+          <div class="image-tools"><div><button id="zoom-out" class="icon-button" aria-label="缩小" title="缩小"><span data-icon="minus"></span></button><label class="zoom-entry"><input id="zoom-label" type="number" min="25" step="25" value="100" aria-label="缩放百分比"><span>%</span></label><button id="zoom-in" class="icon-button" aria-label="放大" title="放大"><span data-icon="plus"></span></button></div><button id="zoom-fit" class="text-button">适应窗口</button><button id="rotate" class="text-button"><span data-icon="rotate"></span>旋转</button><button id="original" class="text-button"><span data-icon="expand"></span>大图核对</button></div>
+          <div id="record-notice" class="record-notice"></div>
+          <form id="edit-form" autocomplete="off">
+            <label class="field"><span>型号</span><input name="model" id="model" placeholder="请输入手机型号" maxlength="150"><small id="model-error"></small></label>
+            <label class="field"><span>内存 / 存储</span><input name="memory" id="memory" placeholder="例如 12GB + 512GB" maxlength="150"><small id="memory-error"></small></label>
+            <label class="field"><span>IMEI 1</span><input name="imei1" id="imei1" class="mono" inputmode="numeric" placeholder="15 位 IMEI" maxlength="30"><small id="imei1-error"></small></label>
+            <label class="field"><span>IMEI 2</span><input name="imei2" id="imei2" class="mono" inputmode="numeric" placeholder="15 位 IMEI" maxlength="30"><small id="imei2-error"></small></label>
+            <label class="review-checkbox"><input id="reviewed" type="checkbox">我已对照原图核对这四项信息</label>
+            <div class="save-actions"><button id="save" type="submit" class="button">保存修改</button><button id="save-next" type="button" class="button primary">保存并下一张 <span data-icon="arrow"></span></button></div>
+            <div class="save-caption"><span id="save-state">修改后请保存</span><span>⌘ / Ctrl + Enter 保存</span></div>
+          </form>
+          <details class="ocr-details"><summary>查看识别原文</summary><pre id="ocr-text"></pre></details>
+          <div class="record-actions"><button id="retry" class="text-button"><span data-icon="rotate"></span>重新识别此图</button><button id="delete" class="text-button danger">移除记录</button></div>
+        </div>
+      </aside>
+    </section>
+    <footer class="page-footer"><span><span data-icon="shield"></span> 图片和结果保存在此浏览器 · 清理网站数据会删除记录</span><span>Excel 保留完整 IMEI · 错误记录不会被自动丢弃</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <dialog id="lightbox" aria-labelledby="lightbox-title">
+    <div class="lightbox-heading"><div><h3 id="lightbox-title">大图核对</h3><span id="lightbox-name"></span></div><span>左侧拖动查看细节 · 右侧直接修改保存</span><button id="close-lightbox" class="button">返回工作台 ×</button></div>
+    <div class="review-layout"><section id="large-image-panel" aria-label="大图参考"><div class="viewer-help">拖动图片移动位置 · 可直接输入放大比例 · Ctrl + 滚轮缩放</div></section><aside id="large-edit-panel" aria-label="大图编辑区"><h3>对照原图修改</h3></aside></div>
+  </dialog>
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title"><h3 id="confirm-title">操作确认</h3><p id="confirm-message"></p><form method="dialog"><button class="button" value="cancel">取消</button><button class="button primary" value="yes">继续</button></form></dialog>
+</body>
+</html>
